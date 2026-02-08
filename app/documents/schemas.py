@@ -8,6 +8,7 @@ class DocumentResponse(BaseModel):
 
     id: int
     investment_id: int
+    security_id: int | None
     document_name: str
     document_date: str | None
     investment_series: str | None

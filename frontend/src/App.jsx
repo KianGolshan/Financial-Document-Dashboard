@@ -3,14 +3,19 @@ import { api } from "./api";
 import Sidebar from "./components/Sidebar";
 import InvestmentPanel from "./components/InvestmentPanel";
 import InvestmentForm from "./components/InvestmentForm";
+import SecurityForm from "./components/SecurityForm";
 import SearchTab from "./components/SearchTab";
 
 export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [investments, setInvestments] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedInvestmentId, setSelectedInvestmentId] = useState(null);
+  const [selectedSecurityId, setSelectedSecurityId] = useState(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState(null);
+  const [securityFormOpen, setSecurityFormOpen] = useState(false);
+  const [securityFormInvestmentId, setSecurityFormInvestmentId] = useState(null);
+  const [editingSecurity, setEditingSecurity] = useState(null);
   const [error, setError] = useState("");
 
   const loadInvestments = useCallback(async () => {
@@ -26,7 +31,17 @@ export default function App() {
     loadInvestments();
   }, [loadInvestments]);
 
-  const selected = investments.find((i) => i.id === selectedId) || null;
+  const selected = investments.find((i) => i.id === selectedInvestmentId) || null;
+
+  function handleSelectInvestment(investmentId) {
+    setSelectedInvestmentId(investmentId);
+    setSelectedSecurityId(null);
+  }
+
+  function handleSelectSecurity(investmentId, securityId) {
+    setSelectedInvestmentId(investmentId);
+    setSelectedSecurityId(securityId);
+  }
 
   function handleAdd() {
     setEditingInvestment(null);
@@ -42,7 +57,10 @@ export default function App() {
     if (!confirm("Delete this investment and all its documents?")) return;
     try {
       await api.deleteInvestment(id);
-      if (selectedId === id) setSelectedId(null);
+      if (selectedInvestmentId === id) {
+        setSelectedInvestmentId(null);
+        setSelectedSecurityId(null);
+      }
       loadInvestments();
     } catch (e) {
       setError(e.message);
@@ -53,6 +71,36 @@ export default function App() {
     setFormOpen(false);
     setEditingInvestment(null);
     loadInvestments();
+  }
+
+  function handleAddSecurity(investmentId) {
+    setSecurityFormInvestmentId(investmentId);
+    setEditingSecurity(null);
+    setSecurityFormOpen(true);
+  }
+
+  function handleEditSecurity(investmentId, security) {
+    setSecurityFormInvestmentId(investmentId);
+    setEditingSecurity(security);
+    setSecurityFormOpen(true);
+  }
+
+  function handleSecurityFormDone() {
+    setSecurityFormOpen(false);
+    setEditingSecurity(null);
+    setSecurityFormInvestmentId(null);
+    loadInvestments();
+  }
+
+  async function handleDeleteSecurity(investmentId, securityId) {
+    if (!confirm("Delete this security and all its documents?")) return;
+    try {
+      await api.deleteSecurity(investmentId, securityId);
+      if (selectedSecurityId === securityId) setSelectedSecurityId(null);
+      loadInvestments();
+    } catch (e) {
+      setError(e.message);
+    }
   }
 
   return (
@@ -99,15 +147,26 @@ export default function App() {
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
             investments={investments}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedInvestmentId={selectedInvestmentId}
+            selectedSecurityId={selectedSecurityId}
+            onSelectInvestment={handleSelectInvestment}
+            onSelectSecurity={handleSelectSecurity}
             onAdd={handleAdd}
             onEdit={handleEdit}
             onDelete={handleDelete}
+            onAddSecurity={handleAddSecurity}
+            onDeleteSecurity={handleDeleteSecurity}
           />
           <main className="flex-1 overflow-auto p-6">
             {selected ? (
-              <InvestmentPanel investment={selected} />
+              <InvestmentPanel
+                investment={selected}
+                selectedSecurityId={selectedSecurityId}
+                onSelectSecurity={(secId) => handleSelectSecurity(selected.id, secId)}
+                onBackToInvestment={() => setSelectedSecurityId(null)}
+                onEditSecurity={(sec) => handleEditSecurity(selected.id, sec)}
+                onAddSecurity={() => handleAddSecurity(selected.id)}
+              />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-400">
                 Select an investment from the sidebar
@@ -117,7 +176,7 @@ export default function App() {
         </div>
       ) : (
         <div className="flex-1 overflow-auto">
-          <SearchTab />
+          <SearchTab investments={investments} />
         </div>
       )}
 
@@ -130,6 +189,20 @@ export default function App() {
             setEditingInvestment(null);
           }}
           onDone={handleFormDone}
+        />
+      )}
+
+      {/* Security create/edit modal */}
+      {securityFormOpen && (
+        <SecurityForm
+          investmentId={securityFormInvestmentId}
+          security={editingSecurity}
+          onClose={() => {
+            setSecurityFormOpen(false);
+            setEditingSecurity(null);
+            setSecurityFormInvestmentId(null);
+          }}
+          onDone={handleSecurityFormDone}
         />
       )}
     </div>

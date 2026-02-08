@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
 from app.exceptions import conflict, not_found
@@ -29,16 +29,29 @@ def list_investments(
     total = db.query(func.count(Investment.id)).scalar() or 0
     items = (
         db.query(Investment)
+        .options(joinedload(Investment.securities))
         .order_by(Investment.created_at.desc())
         .offset((page - 1) * size)
         .limit(size)
         .all()
     )
-    return items, total
+    # Deduplicate due to joinedload + limit
+    seen = set()
+    unique = []
+    for inv in items:
+        if inv.id not in seen:
+            seen.add(inv.id)
+            unique.append(inv)
+    return unique, total
 
 
 def get_investment(db: Session, investment_id: int) -> Investment:
-    investment = db.query(Investment).filter(Investment.id == investment_id).first()
+    investment = (
+        db.query(Investment)
+        .options(joinedload(Investment.securities))
+        .filter(Investment.id == investment_id)
+        .first()
+    )
     if not investment:
         raise not_found(f"Investment {investment_id} not found")
     return investment
@@ -62,7 +75,7 @@ def update_investment(
 
 def delete_investment(db: Session, investment_id: int) -> None:
     investment = get_investment(db, investment_id)
-    # Remove associated upload folder
+    # Remove associated upload folder (includes security subfolders)
     folder = settings.UPLOAD_ROOT / "investments" / investment.investment_name
     if folder.exists():
         shutil.rmtree(folder)

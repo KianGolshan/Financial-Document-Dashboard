@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { api } from "../api";
 
-export default function UploadModal({ investmentId, onClose, onDone }) {
+export default function UploadModal({ investmentId, securityId, onClose, onDone }) {
   const [files, setFiles] = useState([]);
   const [documentName, setDocumentName] = useState("");
   const [documentDate, setDocumentDate] = useState("");
@@ -23,6 +23,7 @@ export default function UploadModal({ investmentId, onClose, onDone }) {
       }
       formData.append("document_name", documentName);
       if (documentDate) formData.append("document_date", documentDate);
+      if (securityId) formData.append("security_id", securityId);
 
       await api.uploadDocuments(investmentId, formData);
       onDone();
@@ -55,7 +56,7 @@ export default function UploadModal({ investmentId, onClose, onDone }) {
           {/* File picker */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Files (.pdf, .doc, .docx)
+              Files (.pdf, .doc, .docx, .xlsx, .xls)
             </label>
             <div
               onClick={() => inputRef.current.click()}
@@ -65,7 +66,7 @@ export default function UploadModal({ investmentId, onClose, onDone }) {
                 ref={inputRef}
                 type="file"
                 multiple
-                accept=".pdf,.doc,.docx"
+                accept=".pdf,.doc,.docx,.xlsx,.xls"
                 className="hidden"
                 onChange={(e) => setFiles([...e.target.files])}
               />

@@ -1,6 +1,7 @@
+import mimetypes
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, UploadFile, status
+from fastapi import APIRouter, Depends, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -21,10 +22,11 @@ async def upload_document(
     file: UploadFile,
     document_name: str = Form(...),
     document_date: str | None = Form(None),
+    security_id: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
     return await service.upload_document(
-        db, investment_id, file, document_name, document_date
+        db, investment_id, file, document_name, document_date, security_id=security_id
     )
 
 
@@ -34,16 +36,21 @@ async def bulk_upload_documents(
     files: list[UploadFile],
     document_name: str = Form(...),
     document_date: str | None = Form(None),
+    security_id: int | None = Form(None),
     db: Session = Depends(get_db),
 ):
     return await service.bulk_upload_documents(
-        db, investment_id, files, document_name, document_date
+        db, investment_id, files, document_name, document_date, security_id=security_id
     )
 
 
 @router.get("/", response_model=DocumentListResponse)
-def list_documents(investment_id: int, db: Session = Depends(get_db)):
-    docs, total = service.list_documents(db, investment_id)
+def list_documents(
+    investment_id: int,
+    security_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    docs, total = service.list_documents(db, investment_id, security_id=security_id)
     return DocumentListResponse(items=docs, total=total)
 
 
@@ -67,6 +74,20 @@ def download_document(
         filename=doc.original_filename,
         media_type="application/octet-stream",
     )
+
+
+@router.get("/{document_id}/view")
+def view_document(
+    investment_id: int, document_id: int, db: Session = Depends(get_db)
+):
+    doc = service.get_document(db, investment_id, document_id)
+    path = Path(doc.file_path)
+    if not path.exists():
+        raise not_found("File not found on disk")
+    mime, _ = mimetypes.guess_type(doc.original_filename)
+    if not mime:
+        mime = "application/octet-stream"
+    return FileResponse(path=path, media_type=mime)
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

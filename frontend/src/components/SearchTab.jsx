@@ -1,12 +1,25 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
+import DocumentViewer from "./DocumentViewer";
 
-export default function SearchTab() {
+export default function SearchTab({ investments = [] }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterInvestmentId, setFilterInvestmentId] = useState("");
+  const [filterSecurityId, setFilterSecurityId] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo, setFilterDateTo] = useState("");
+  const [viewerDoc, setViewerDoc] = useState(null);
+  const [viewerQuery, setViewerQuery] = useState("");
+
+  const selectedInvestment = investments.find(
+    (i) => i.id === Number(filterInvestmentId)
+  );
+  const securities = selectedInvestment?.securities || [];
 
   useEffect(() => {
     if (!query.trim()) {
@@ -18,7 +31,12 @@ export default function SearchTab() {
       setLoading(true);
       setError("");
       try {
-        const data = await api.search(query);
+        const filters = {};
+        if (filterInvestmentId) filters.investment_id = filterInvestmentId;
+        if (filterSecurityId) filters.security_id = filterSecurityId;
+        if (filterDateFrom) filters.date_from = filterDateFrom;
+        if (filterDateTo) filters.date_to = filterDateTo;
+        const data = await api.search(query, filters);
         setResults(data.results);
         setTotal(data.total);
       } catch (e) {
@@ -28,7 +46,12 @@ export default function SearchTab() {
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, filterInvestmentId, filterSecurityId, filterDateFrom, filterDateTo]);
+
+  function handleView(r) {
+    setViewerDoc({ investmentId: r.document.investment_id, document: r.document });
+    setViewerQuery(query);
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8">
@@ -37,7 +60,7 @@ export default function SearchTab() {
       </h2>
 
       {/* Search input */}
-      <div className="relative mb-6">
+      <div className="relative mb-4">
         <input
           type="text"
           value={query}
@@ -51,6 +74,80 @@ export default function SearchTab() {
           </div>
         )}
       </div>
+
+      {/* Filter toggle */}
+      <button
+        onClick={() => setShowFilters(!showFilters)}
+        className="text-sm text-blue-600 hover:text-blue-800 mb-4"
+      >
+        {showFilters ? "Hide Filters" : "Show Filters"}
+      </button>
+
+      {/* Filter bar */}
+      {showFilters && (
+        <div className="bg-gray-50 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Investment
+            </label>
+            <select
+              value={filterInvestmentId}
+              onChange={(e) => {
+                setFilterInvestmentId(e.target.value);
+                setFilterSecurityId("");
+              }}
+              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All investments</option>
+              {investments.map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.investment_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Security
+            </label>
+            <select
+              value={filterSecurityId}
+              onChange={(e) => setFilterSecurityId(e.target.value)}
+              disabled={!filterInvestmentId}
+              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+            >
+              <option value="">All securities</option>
+              {securities.map((sec) => (
+                <option key={sec.id} value={sec.id}>
+                  {sec.investment_round || sec.description || `Security #${sec.id}`}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Date From
+            </label>
+            <input
+              type="date"
+              value={filterDateFrom}
+              onChange={(e) => setFilterDateFrom(e.target.value)}
+              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Date To
+            </label>
+            <input
+              type="date"
+              value={filterDateTo}
+              onChange={(e) => setFilterDateTo(e.target.value)}
+              className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded px-4 py-2 text-red-700 text-sm mb-4">
@@ -78,19 +175,28 @@ export default function SearchTab() {
                   {r.document.document_name}
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  {r.document.original_filename}
-                  {r.document.investment_series &&
-                    ` \u00b7 ${r.document.investment_series}`}
+                  {r.investment_name && <span>{r.investment_name}</span>}
+                  {r.investment_round && <span> &middot; {r.investment_round}</span>}
+                  {r.document.original_filename &&
+                    <span> &middot; {r.document.original_filename}</span>}
                   {r.document.document_date &&
-                    ` \u00b7 ${r.document.document_date}`}
+                    <span> &middot; {r.document.document_date}</span>}
                 </p>
               </div>
-              <a
-                href={r.download_url}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded transition shrink-0 ml-4"
-              >
-                Download
-              </a>
+              <div className="flex gap-2 shrink-0 ml-4">
+                <button
+                  onClick={() => handleView(r)}
+                  className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1.5 rounded transition"
+                >
+                  View
+                </button>
+                <a
+                  href={r.download_url}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded transition"
+                >
+                  Download
+                </a>
+              </div>
             </div>
 
             {/* Snippets with highlighted keywords */}
@@ -113,6 +219,18 @@ export default function SearchTab() {
         <div className="text-center py-12 text-gray-400">
           No matching documents found
         </div>
+      )}
+
+      {viewerDoc && (
+        <DocumentViewer
+          investmentId={viewerDoc.investmentId}
+          document={viewerDoc.document}
+          searchQuery={viewerQuery}
+          onClose={() => {
+            setViewerDoc(null);
+            setViewerQuery("");
+          }}
+        />
       )}
     </div>
   );

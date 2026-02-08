@@ -1,11 +1,29 @@
+import { useState } from "react";
+
 export default function Sidebar({
   investments,
-  selectedId,
-  onSelect,
+  selectedInvestmentId,
+  selectedSecurityId,
+  onSelectInvestment,
+  onSelectSecurity,
   onAdd,
   onEdit,
   onDelete,
+  onAddSecurity,
+  onDeleteSecurity,
 }) {
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  function toggleExpand(id, e) {
+    e.stopPropagation();
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <aside className="w-72 bg-slate-800 text-white flex flex-col">
       <div className="p-4 border-b border-slate-700 flex items-center justify-between">
@@ -25,50 +43,116 @@ export default function Sidebar({
             No investments yet
           </li>
         )}
-        {investments.map((inv) => (
-          <li
-            key={inv.id}
-            onClick={() => onSelect(inv.id)}
-            className={`px-4 py-3 cursor-pointer border-b border-slate-700 transition group ${
-              selectedId === inv.id
-                ? "bg-slate-700"
-                : "hover:bg-slate-750 hover:bg-slate-700/50"
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="font-medium text-sm truncate">
-                  {inv.investment_name}
-                </p>
-                {inv.series && (
-                  <p className="text-xs text-slate-400 mt-0.5">{inv.series}</p>
-                )}
-              </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition ml-2 shrink-0">
+        {investments.map((inv) => {
+          const isExpanded = expandedIds.has(inv.id);
+          const hasSecs = inv.securities && inv.securities.length > 0;
+          const isSelected =
+            selectedInvestmentId === inv.id && !selectedSecurityId;
+
+          return (
+            <li key={inv.id} className="border-b border-slate-700">
+              <div
+                onClick={() => onSelectInvestment(inv.id)}
+                className={`px-4 py-3 cursor-pointer transition group flex items-start ${
+                  isSelected
+                    ? "bg-slate-700"
+                    : "hover:bg-slate-700/50"
+                }`}
+              >
+                {/* Expand/collapse toggle */}
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(inv);
-                  }}
-                  className="text-slate-400 hover:text-blue-400 text-xs p-1"
-                  title="Edit"
+                  onClick={(e) => toggleExpand(inv.id, e)}
+                  className="text-slate-400 hover:text-white text-xs mr-2 mt-0.5 w-4 shrink-0"
                 >
-                  &#9998;
+                  {hasSecs ? (isExpanded ? "\u25BC" : "\u25B6") : "\u00A0"}
                 </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(inv.id);
-                  }}
-                  className="text-slate-400 hover:text-red-400 text-xs p-1"
-                  title="Delete"
-                >
-                  &#10005;
-                </button>
+
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-sm truncate">
+                    {inv.investment_name}
+                  </p>
+                  {inv.asset_type && (
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {inv.asset_type}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition ml-2 shrink-0">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAddSecurity(inv.id);
+                    }}
+                    className="text-slate-400 hover:text-green-400 text-xs p-1"
+                    title="Add Security"
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(inv);
+                    }}
+                    className="text-slate-400 hover:text-blue-400 text-xs p-1"
+                    title="Edit"
+                  >
+                    &#9998;
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(inv.id);
+                    }}
+                    className="text-slate-400 hover:text-red-400 text-xs p-1"
+                    title="Delete"
+                  >
+                    &#10005;
+                  </button>
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+
+              {/* Securities children */}
+              {isExpanded && hasSecs && (
+                <ul className="bg-slate-900/50">
+                  {inv.securities.map((sec) => {
+                    const isSecSelected =
+                      selectedInvestmentId === inv.id &&
+                      selectedSecurityId === sec.id;
+                    return (
+                      <li
+                        key={sec.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectSecurity(inv.id, sec.id);
+                        }}
+                        className={`pl-10 pr-4 py-2 cursor-pointer text-sm transition group/sec flex items-center justify-between ${
+                          isSecSelected
+                            ? "bg-slate-600"
+                            : "hover:bg-slate-700/50"
+                        }`}
+                      >
+                        <span className="truncate text-slate-300">
+                          {sec.investment_round || sec.description || `Security #${sec.id}`}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteSecurity(inv.id, sec.id);
+                          }}
+                          className="text-slate-500 hover:text-red-400 text-xs p-1 opacity-0 group-hover/sec:opacity-100 transition shrink-0 ml-2"
+                          title="Delete Security"
+                        >
+                          &#10005;
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </aside>
   );
