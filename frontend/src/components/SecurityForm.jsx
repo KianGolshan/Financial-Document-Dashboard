@@ -1,34 +1,34 @@
 import { useState } from "react";
 import { api } from "../api";
 
-export default function InvestmentForm({ investment, onClose, onDone }) {
-  const isEdit = !!investment;
-  const [name, setName] = useState(investment?.investment_name || "");
-  const [assetType, setAssetType] = useState(investment?.asset_type || "");
-  const [description, setDescription] = useState(
-    investment?.description || ""
-  );
-  const [notes, setNotes] = useState(investment?.notes || "");
+export default function SecurityForm({ investmentId, security, onClose, onDone }) {
+  const isEdit = !!security;
+  const [description, setDescription] = useState(security?.description || "");
+  const [investmentRound, setInvestmentRound] = useState(security?.investment_round || "");
+  const [investmentDate, setInvestmentDate] = useState(security?.investment_date || "");
+  const [investmentSize, setInvestmentSize] = useState(security?.investment_size ?? "");
+  const [pricePerShare, setPricePerShare] = useState(security?.price_per_share ?? "");
+  const [notes, setNotes] = useState(security?.notes || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!name.trim()) return setError("Investment name is required");
-
     setLoading(true);
     setError("");
     try {
       const data = {
-        investment_name: name,
-        asset_type: assetType || null,
         description: description || null,
+        investment_round: investmentRound || null,
+        investment_date: investmentDate || null,
+        investment_size: investmentSize !== "" ? Number(investmentSize) : null,
+        price_per_share: pricePerShare !== "" ? Number(pricePerShare) : null,
         notes: notes || null,
       };
       if (isEdit) {
-        await api.updateInvestment(investment.id, data);
+        await api.updateSecurity(investmentId, security.id, data);
       } else {
-        await api.createInvestment(data);
+        await api.createSecurity(investmentId, data);
       }
       onDone();
     } catch (e) {
@@ -40,10 +40,10 @@ export default function InvestmentForm({ investment, onClose, onDone }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-auto">
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-lg font-semibold">
-            {isEdit ? "Edit Investment" : "New Investment"}
+            {isEdit ? "Edit Security" : "New Security"}
           </h3>
           <button
             onClick={onClose}
@@ -61,46 +61,74 @@ export default function InvestmentForm({ investment, onClose, onDone }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Investment Name *
+              Security Description
             </label>
             <input
               type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Anthropic"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Asset Type
-            </label>
-            <input
-              type="text"
-              value={assetType}
-              onChange={(e) => setAssetType(e.target.value)}
-              placeholder="e.g. Venture Capital, Private Equity"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Description
-            </label>
-            <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="Optional description..."
+              placeholder="e.g. Series F Preferred Stock"
               className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes
+              Investment Round
+            </label>
+            <input
+              type="text"
+              value={investmentRound}
+              onChange={(e) => setInvestmentRound(e.target.value)}
+              placeholder="e.g. Series F"
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Investment Date
+            </label>
+            <input
+              type="date"
+              value={investmentDate}
+              onChange={(e) => setInvestmentDate(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Investment Size ($)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={investmentSize}
+                onChange={(e) => setInvestmentSize(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Price Per Share ($)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                value={pricePerShare}
+                onChange={(e) => setPricePerShare(e.target.value)}
+                placeholder="0.00"
+                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Additional Notes
             </label>
             <textarea
               value={notes}

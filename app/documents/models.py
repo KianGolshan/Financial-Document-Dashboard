@@ -11,6 +11,7 @@ class Document(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     investment_id: Mapped[int] = mapped_column(ForeignKey("investments.id"), nullable=False)
+    security_id: Mapped[int | None] = mapped_column(ForeignKey("securities.id"), nullable=True)
     document_name: Mapped[str] = mapped_column(String(255), nullable=False)
     document_date: Mapped[str | None] = mapped_column(String(50))
     investment_series: Mapped[str | None] = mapped_column(String(100))
@@ -27,6 +28,10 @@ class Document(Base):
     investment: Mapped["Investment"] = relationship(
         "Investment", back_populates="documents"
     )
+    security: Mapped["Security | None"] = relationship(
+        "Security", back_populates="documents"
+    )
 
 
 from app.investments.models import Investment  # noqa: E402, F401
+from app.securities.models import Security  # noqa: E402, F401

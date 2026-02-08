@@ -2,17 +2,21 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+from app.securities.schemas import SecurityResponse
+
 
 class InvestmentCreate(BaseModel):
     investment_name: str
-    series: str | None = None
+    asset_type: str | None = None
     description: str | None = None
+    notes: str | None = None
 
 
 class InvestmentUpdate(BaseModel):
     investment_name: str | None = None
-    series: str | None = None
+    asset_type: str | None = None
     description: str | None = None
+    notes: str | None = None
 
 
 class InvestmentResponse(BaseModel):
@@ -20,8 +24,10 @@ class InvestmentResponse(BaseModel):
 
     id: int
     investment_name: str
-    series: str | None
+    asset_type: str | None
     description: str | None
+    notes: str | None
+    securities: list[SecurityResponse] = []
     created_at: datetime
     updated_at: datetime
 

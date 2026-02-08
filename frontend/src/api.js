@@ -34,6 +34,29 @@ export const api = {
   deleteInvestment: (id) =>
     request(`${API}/investments/${id}`, { method: "DELETE" }),
 
+  // Securities
+  createSecurity: (investmentId, data) =>
+    request(`${API}/investments/${investmentId}/securities/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+
+  listSecurities: (investmentId) =>
+    request(`${API}/investments/${investmentId}/securities/`),
+
+  updateSecurity: (investmentId, securityId, data) =>
+    request(`${API}/investments/${investmentId}/securities/${securityId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+
+  deleteSecurity: (investmentId, securityId) =>
+    request(`${API}/investments/${investmentId}/securities/${securityId}`, {
+      method: "DELETE",
+    }),
+
   // Documents
   uploadDocuments: (investmentId, formData) =>
     request(`${API}/investments/${investmentId}/documents/bulk`, {
@@ -41,8 +64,11 @@ export const api = {
       body: formData,
     }),
 
-  listDocuments: (investmentId) =>
-    request(`${API}/investments/${investmentId}/documents/`),
+  listDocuments: (investmentId, securityId = null) => {
+    let url = `${API}/investments/${investmentId}/documents/`;
+    if (securityId) url += `?security_id=${securityId}`;
+    return request(url);
+  },
 
   deleteDocument: (investmentId, docId) =>
     request(`${API}/investments/${investmentId}/documents/${docId}`, {
@@ -52,6 +78,16 @@ export const api = {
   downloadUrl: (investmentId, docId) =>
     `${API}/investments/${investmentId}/documents/${docId}/download`,
 
+  viewUrl: (investmentId, docId) =>
+    `${API}/investments/${investmentId}/documents/${docId}/view`,
+
   // Search
-  search: (query) => request(`${API}/search/?q=${encodeURIComponent(query)}`),
+  search: (query, filters = {}) => {
+    const params = new URLSearchParams({ q: query });
+    if (filters.investment_id) params.set("investment_id", filters.investment_id);
+    if (filters.security_id) params.set("security_id", filters.security_id);
+    if (filters.date_from) params.set("date_from", filters.date_from);
+    if (filters.date_to) params.set("date_to", filters.date_to);
+    return request(`${API}/search/?${params.toString()}`);
+  },
 };
