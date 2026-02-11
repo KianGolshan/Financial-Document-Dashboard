@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../api";
 import UploadModal from "./UploadModal";
 import DocumentViewer from "./DocumentViewer";
+import FinancialStatements from "./FinancialStatements";
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -17,7 +18,7 @@ function formatCurrency(value) {
   }).format(value);
 }
 
-function DocumentTable({ documents, investmentId, onDelete, onView }) {
+function DocumentTable({ documents, investmentId, onDelete, onView, onFinancials }) {
   if (documents.length === 0) {
     return (
       <div className="text-center py-12 text-gray-400">
@@ -67,6 +68,14 @@ function DocumentTable({ documents, investmentId, onDelete, onView }) {
                   >
                     View
                   </button>
+                  {doc.document_type?.toLowerCase() === ".pdf" && (
+                    <button
+                      onClick={() => onFinancials(doc)}
+                      className="text-purple-600 hover:text-purple-800 text-xs font-medium"
+                    >
+                      Financials
+                    </button>
+                  )}
                   <a
                     href={api.downloadUrl(investmentId, doc.id)}
                     className="text-blue-600 hover:text-blue-800 text-xs font-medium"
@@ -101,6 +110,7 @@ export default function InvestmentPanel({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [viewerDoc, setViewerDoc] = useState(null);
+  const [financialsDoc, setFinancialsDoc] = useState(null);
 
   const selectedSecurity = selectedSecurityId
     ? (investment.securities || []).find((s) => s.id === selectedSecurityId)
@@ -197,6 +207,7 @@ export default function InvestmentPanel({
           investmentId={investment.id}
           onDelete={handleDeleteDoc}
           onView={setViewerDoc}
+          onFinancials={setFinancialsDoc}
         />
 
         {uploading && (
@@ -216,6 +227,14 @@ export default function InvestmentPanel({
             investmentId={investment.id}
             document={viewerDoc}
             onClose={() => setViewerDoc(null)}
+          />
+        )}
+
+        {financialsDoc && (
+          <FinancialStatements
+            investmentId={investment.id}
+            document={financialsDoc}
+            onClose={() => setFinancialsDoc(null)}
           />
         )}
       </div>
@@ -315,6 +334,7 @@ export default function InvestmentPanel({
         investmentId={investment.id}
         onDelete={handleDeleteDoc}
         onView={setViewerDoc}
+        onFinancials={setFinancialsDoc}
       />
 
       {uploading && (
@@ -333,6 +353,14 @@ export default function InvestmentPanel({
           investmentId={investment.id}
           document={viewerDoc}
           onClose={() => setViewerDoc(null)}
+        />
+      )}
+
+      {financialsDoc && (
+        <FinancialStatements
+          investmentId={investment.id}
+          document={financialsDoc}
+          onClose={() => setFinancialsDoc(null)}
         />
       )}
     </div>
