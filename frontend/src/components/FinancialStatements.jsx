@@ -7,6 +7,12 @@ const STATEMENT_TABS = [
   { key: "cash_flow", label: "Cash Flow" },
 ];
 
+const REVIEW_BADGES = {
+  pending: { label: "Pending", cls: "bg-yellow-100 text-yellow-700" },
+  reviewed: { label: "Reviewed", cls: "bg-blue-100 text-blue-700" },
+  approved: { label: "Approved", cls: "bg-green-100 text-green-700" },
+};
+
 function formatNumber(value) {
   if (value == null) return "";
   return new Intl.NumberFormat("en-US", {
@@ -15,7 +21,69 @@ function formatNumber(value) {
   }).format(value);
 }
 
-function StatementTable({ statement }) {
+function ReviewBadge({ status }) {
+  const badge = REVIEW_BADGES[status] || REVIEW_BADGES.pending;
+  return (
+    <span className={`text-xs px-2 py-0.5 rounded-full ${badge.cls}`}>
+      {badge.label}
+    </span>
+  );
+}
+
+function EditableValue({ item, onSave, locked }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState("");
+  const current = item.edited_value ?? item.value;
+
+  function startEdit() {
+    if (locked) return;
+    setVal(current != null ? String(current) : "");
+    setEditing(true);
+  }
+
+  function save() {
+    setEditing(false);
+    const parsed = val === "" ? null : parseFloat(val);
+    if (parsed !== current) {
+      onSave(item.id, { edited_value: parsed });
+    }
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="number"
+        step="any"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="w-24 px-1 py-0.5 text-sm text-right border border-purple-300 rounded focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono"
+      />
+    );
+  }
+
+  const modified = item.is_user_modified && item.edited_value != null;
+  return (
+    <span
+      onClick={startEdit}
+      className={`cursor-pointer hover:bg-purple-50 px-1 rounded ${
+        modified ? "bg-purple-50 border-b border-purple-300" : ""
+      } ${locked ? "cursor-default" : ""}`}
+      title={modified ? "User edited" : locked ? "Locked" : "Click to edit"}
+    >
+      {formatNumber(current)}
+    </span>
+  );
+}
+
+function StatementTable({ statement, onSaveItem, onReview, onLock, investmentId }) {
+  const [mapping, setMapping] = useState(false);
+
   if (!statement || !statement.line_items || statement.line_items.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400">
@@ -24,15 +92,71 @@ function StatementTable({ statement }) {
     );
   }
 
+  async function handleAutoMap() {
+    setMapping(true);
+    try {
+      await api.mapStatementToInvestment(statement.id, {
+        investment_id: investmentId,
+        reporting_date: statement.period_end_date,
+        fiscal_period_label: statement.period,
+      });
+    } catch {
+      // ignore
+    }
+    setMapping(false);
+  }
+
   return (
     <div>
-      <div className="mb-3 text-sm text-gray-600">
-        <span className="font-medium">{statement.period}</span>
-        {statement.period_end_date && (
-          <span className="ml-3 text-gray-400">
-            Ending: {statement.period_end_date}
-          </span>
-        )}
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-sm text-gray-900">{statement.period}</span>
+          {statement.period_end_date && (
+            <span className="text-xs text-gray-400">
+              Ending: {statement.period_end_date}
+            </span>
+          )}
+          <ReviewBadge status={statement.review_status} />
+          {statement.locked && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+              Locked
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {!statement.investment_id && (
+            <button
+              onClick={handleAutoMap}
+              disabled={mapping}
+              className="text-xs text-purple-600 hover:text-purple-800 font-medium"
+            >
+              {mapping ? "Mapping..." : "Map to Investment"}
+            </button>
+          )}
+          {statement.investment_id && (
+            <span className="text-xs text-green-600">Mapped</span>
+          )}
+          <button
+            onClick={() => onReview(statement.id, "reviewed")}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+          >
+            Review
+          </button>
+          <button
+            onClick={() => onReview(statement.id, "approved")}
+            className="text-xs text-green-600 hover:text-green-800 font-medium"
+          >
+            Approve
+          </button>
+          {!statement.locked && (
+            <button
+              onClick={() => onLock(statement.id)}
+              className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+            >
+              Lock
+            </button>
+          )}
+        </div>
       </div>
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full text-sm">
@@ -52,16 +176,21 @@ function StatementTable({ statement }) {
                   className={`px-4 py-2 ${item.is_total ? "font-bold text-gray-900" : "text-gray-700"}`}
                   style={{ paddingLeft: `${1 + item.indent_level * 1.25}rem` }}
                 >
-                  {item.label}
+                  {item.edited_label || item.label}
+                  {item.is_user_modified && (
+                    <span className="ml-1 text-purple-400 text-xs">*</span>
+                  )}
                 </td>
                 <td
                   className={`px-4 py-2 text-right font-mono ${
-                    item.is_total
-                      ? "font-bold text-gray-900"
-                      : "text-gray-700"
-                  } ${item.value != null && item.value < 0 ? "text-red-600" : ""}`}
+                    item.is_total ? "font-bold text-gray-900" : "text-gray-700"
+                  } ${(item.edited_value ?? item.value) != null && (item.edited_value ?? item.value) < 0 ? "text-red-600" : ""}`}
                 >
-                  {formatNumber(item.value)}
+                  <EditableValue
+                    item={item}
+                    onSave={onSaveItem}
+                    locked={statement.locked}
+                  />
                 </td>
               </tr>
             ))}
@@ -149,6 +278,34 @@ export default function FinancialStatements({
     try {
       await api.triggerParsing(investmentId, document.id);
       setParsing(true);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function handleSaveItem(lineItemId, editData) {
+    try {
+      await api.editLineItem(lineItemId, editData);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function handleReview(statementId, status) {
+    try {
+      await api.reviewStatement(statementId, { review_status: status });
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function handleLock(statementId) {
+    if (!confirm("Lock this statement? No further edits will be allowed.")) return;
+    try {
+      await api.lockStatement(statementId);
       load();
     } catch (e) {
       setError(e.message);
@@ -313,7 +470,14 @@ export default function FinancialStatements({
             ) : (
               <div className="space-y-6">
                 {statementsForTab.map((stmt) => (
-                  <StatementTable key={stmt.id} statement={stmt} />
+                  <StatementTable
+                    key={stmt.id}
+                    statement={stmt}
+                    onSaveItem={handleSaveItem}
+                    onReview={handleReview}
+                    onLock={handleLock}
+                    investmentId={investmentId}
+                  />
                 ))}
               </div>
             )}

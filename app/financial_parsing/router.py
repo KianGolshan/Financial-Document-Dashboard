@@ -8,8 +8,13 @@ from app.database import get_db
 from app.financial_parsing import service
 from app.financial_parsing.schemas import (
     DocumentStatementsResponse,
+    EditLogResponse,
     FinancialStatementResponse,
+    LineItemEditRequest,
+    LineItemResponse,
+    MapInvestmentRequest,
     ParseJobResponse,
+    ReviewRequest,
 )
 
 router = APIRouter(
@@ -17,6 +22,11 @@ router = APIRouter(
     tags=["Financial Parsing"],
 )
 
+# Standalone router for endpoints that don't need the document path prefix
+standalone_router = APIRouter(tags=["Financial Parsing"])
+
+
+# ── Parsing ─────────────────────────────────────────────────────────────
 
 @router.post("/parse", response_model=ParseJobResponse, status_code=status.HTTP_202_ACCEPTED)
 def trigger_parsing(
@@ -87,3 +97,92 @@ def delete_financials(
     db: Session = Depends(get_db),
 ):
     service.delete_financials(db, document_id)
+
+
+# ── Review workflow ─────────────────────────────────────────────────────
+
+@standalone_router.post(
+    "/financials/statements/{statement_id}/review",
+    response_model=FinancialStatementResponse,
+)
+def review_statement(
+    statement_id: int,
+    body: ReviewRequest,
+    db: Session = Depends(get_db),
+):
+    return service.review_statement(
+        db, statement_id, body.review_status, body.reviewer_id, body.review_notes,
+    )
+
+
+@standalone_router.post(
+    "/financials/statements/{statement_id}/lock",
+    response_model=FinancialStatementResponse,
+)
+def lock_statement(
+    statement_id: int,
+    db: Session = Depends(get_db),
+):
+    return service.lock_statement(db, statement_id)
+
+
+# ── Line item editing ───────────────────────────────────────────────────
+
+@standalone_router.patch(
+    "/financials/line-items/{line_item_id}",
+    response_model=LineItemResponse,
+)
+def edit_line_item(
+    line_item_id: int,
+    body: LineItemEditRequest,
+    db: Session = Depends(get_db),
+):
+    return service.edit_line_item(db, line_item_id, body.edited_label, body.edited_value)
+
+
+@standalone_router.get(
+    "/financials/line-items/{line_item_id}/history",
+    response_model=list[EditLogResponse],
+)
+def get_edit_history(
+    line_item_id: int,
+    db: Session = Depends(get_db),
+):
+    return service.get_edit_history(db, line_item_id)
+
+
+# ── Investment mapping ──────────────────────────────────────────────────
+
+@standalone_router.post(
+    "/financials/statements/{statement_id}/map-investment",
+    response_model=FinancialStatementResponse,
+)
+def map_investment(
+    statement_id: int,
+    body: MapInvestmentRequest,
+    db: Session = Depends(get_db),
+):
+    return service.map_statement_to_investment(
+        db, statement_id, body.investment_id, body.reporting_date, body.fiscal_period_label,
+    )
+
+
+@standalone_router.get(
+    "/financials/statements/{statement_id}/suggest-mapping",
+)
+def suggest_mapping(
+    statement_id: int,
+    db: Session = Depends(get_db),
+):
+    return service.suggest_investment_mapping(db, statement_id)
+
+
+@standalone_router.get(
+    "/investments/{investment_id}/financials",
+    response_model=list[FinancialStatementResponse],
+)
+def get_investment_financials(
+    investment_id: int,
+    db: Session = Depends(get_db),
+):
+    return service.get_investment_financials(db, investment_id)

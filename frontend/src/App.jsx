@@ -5,6 +5,7 @@ import InvestmentPanel from "./components/InvestmentPanel";
 import InvestmentForm from "./components/InvestmentForm";
 import SecurityForm from "./components/SecurityForm";
 import SearchTab from "./components/SearchTab";
+import FinancialDataView from "./components/FinancialDataView";
 
 export default function App() {
   const [tab, setTab] = useState("dashboard");
@@ -120,6 +121,16 @@ export default function App() {
             Dashboard
           </button>
           <button
+            onClick={() => setTab("financials")}
+            className={`px-4 py-1.5 rounded text-sm font-medium transition ${
+              tab === "financials"
+                ? "bg-blue-600 text-white"
+                : "text-slate-300 hover:text-white hover:bg-slate-700"
+            }`}
+          >
+            Financials
+          </button>
+          <button
             onClick={() => setTab("search")}
             className={`px-4 py-1.5 rounded text-sm font-medium transition ${
               tab === "search"
@@ -170,6 +181,33 @@ export default function App() {
             ) : (
               <div className="flex items-center justify-center h-full text-gray-400">
                 Select an investment from the sidebar
+              </div>
+            )}
+          </main>
+        </div>
+      ) : tab === "financials" ? (
+        <div className="flex flex-1 overflow-hidden">
+          <Sidebar
+            investments={investments}
+            selectedInvestmentId={selectedInvestmentId}
+            selectedSecurityId={selectedSecurityId}
+            onSelectInvestment={handleSelectInvestment}
+            onSelectSecurity={handleSelectSecurity}
+            onAdd={handleAdd}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onAddSecurity={handleAddSecurity}
+            onDeleteSecurity={handleDeleteSecurity}
+          />
+          <main className="flex-1 overflow-auto p-6">
+            {selected ? (
+              <FinancialDataView
+                investmentId={selected.id}
+                investmentName={selected.investment_name}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-400">
+                Select an investment to view financial data
               </div>
             )}
           </main>

@@ -13,6 +13,15 @@ class LineItemResponse(BaseModel):
     is_total: bool
     indent_level: int
     sort_order: int
+    edited_label: str | None = None
+    edited_value: float | None = None
+    is_user_modified: bool = False
+    canonical_label: str | None = None
+
+
+class LineItemEditRequest(BaseModel):
+    edited_label: str | None = None
+    edited_value: float | None = None
 
 
 class FinancialStatementResponse(BaseModel):
@@ -26,8 +35,27 @@ class FinancialStatementResponse(BaseModel):
     currency: str | None
     unit: str | None
     source_pages: str | None
+    review_status: str = "pending"
+    reviewer_id: str | None = None
+    review_notes: str | None = None
+    locked: bool = False
+    investment_id: int | None = None
+    reporting_date: str | None = None
+    fiscal_period_label: str | None = None
     created_at: datetime
     line_items: list[LineItemResponse]
+
+
+class ReviewRequest(BaseModel):
+    review_status: str  # pending, reviewed, approved
+    reviewer_id: str | None = None
+    review_notes: str | None = None
+
+
+class MapInvestmentRequest(BaseModel):
+    investment_id: int
+    reporting_date: str | None = None
+    fiscal_period_label: str | None = None
 
 
 class ParseJobResponse(BaseModel):
@@ -46,3 +74,14 @@ class ParseJobResponse(BaseModel):
 class DocumentStatementsResponse(BaseModel):
     parse_job: ParseJobResponse | None
     statements: list[FinancialStatementResponse]
+
+
+class EditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    line_item_id: int
+    field: str
+    old_value: str | None
+    new_value: str | None
+    created_at: datetime
