@@ -81,6 +81,32 @@ export const api = {
   viewUrl: (investmentId, docId) =>
     `${API}/investments/${investmentId}/documents/${docId}/view`,
 
+  // Financial Parsing
+  triggerParsing: (investmentId, docId) =>
+    request(
+      `${API}/investments/${investmentId}/documents/${docId}/financials/parse`,
+      { method: "POST" }
+    ),
+
+  getParseStatus: (investmentId, docId) =>
+    request(
+      `${API}/investments/${investmentId}/documents/${docId}/financials/status`
+    ),
+
+  getDocumentFinancials: (investmentId, docId) =>
+    request(
+      `${API}/investments/${investmentId}/documents/${docId}/financials/`
+    ),
+
+  exportFinancialsUrl: (investmentId, docId) =>
+    `${API}/investments/${investmentId}/documents/${docId}/financials/export`,
+
+  deleteFinancials: (investmentId, docId) =>
+    request(
+      `${API}/investments/${investmentId}/documents/${docId}/financials/`,
+      { method: "DELETE" }
+    ),
+
   // Search
   search: (query, filters = {}) => {
     const params = new URLSearchParams({ q: query });

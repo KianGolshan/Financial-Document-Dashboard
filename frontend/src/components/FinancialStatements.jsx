@@ -1,0 +1,325 @@
+import { useState, useEffect, useCallback } from "react";
+import { api } from "../api";
+
+const STATEMENT_TABS = [
+  { key: "income_statement", label: "Income Statement" },
+  { key: "balance_sheet", label: "Balance Sheet" },
+  { key: "cash_flow", label: "Cash Flow" },
+];
+
+function formatNumber(value) {
+  if (value == null) return "";
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function StatementTable({ statement }) {
+  if (!statement || !statement.line_items || statement.line_items.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        No line items found for this statement.
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="mb-3 text-sm text-gray-600">
+        <span className="font-medium">{statement.period}</span>
+        {statement.period_end_date && (
+          <span className="ml-3 text-gray-400">
+            Ending: {statement.period_end_date}
+          </span>
+        )}
+      </div>
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-left text-gray-500 uppercase text-xs">
+              <th className="px-4 py-3">Line Item</th>
+              <th className="px-4 py-3 text-right">Value</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {statement.line_items.map((item) => (
+              <tr
+                key={item.id}
+                className={`${item.is_total ? "bg-gray-50" : "hover:bg-gray-50"}`}
+              >
+                <td
+                  className={`px-4 py-2 ${item.is_total ? "font-bold text-gray-900" : "text-gray-700"}`}
+                  style={{ paddingLeft: `${1 + item.indent_level * 1.25}rem` }}
+                >
+                  {item.label}
+                </td>
+                <td
+                  className={`px-4 py-2 text-right font-mono ${
+                    item.is_total
+                      ? "font-bold text-gray-900"
+                      : "text-gray-700"
+                  } ${item.value != null && item.value < 0 ? "text-red-600" : ""}`}
+                >
+                  {formatNumber(item.value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(statement.currency || statement.unit) && (
+        <div className="mt-2 text-xs text-gray-400 text-right">
+          {statement.currency && <span>Currency: {statement.currency}</span>}
+          {statement.currency && statement.unit && <span> | </span>}
+          {statement.unit && <span>Unit: {statement.unit}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function FinancialStatements({
+  investmentId,
+  document,
+  onClose,
+}) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [parsing, setParsing] = useState(false);
+  const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("income_statement");
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api.getDocumentFinancials(investmentId, document.id);
+      setData(result);
+      if (
+        result.parse_job &&
+        (result.parse_job.status === "processing" ||
+          result.parse_job.status === "pending")
+      ) {
+        setParsing(true);
+      } else {
+        setParsing(false);
+      }
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [investmentId, document.id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // Poll while parsing
+  useEffect(() => {
+    if (!parsing) return;
+    const interval = setInterval(async () => {
+      try {
+        const status = await api.getParseStatus(investmentId, document.id);
+        if (!status || status.status === "completed" || status.status === "failed") {
+          setParsing(false);
+          load();
+        } else {
+          setData((prev) =>
+            prev ? { ...prev, parse_job: status } : prev
+          );
+        }
+      } catch {
+        // ignore polling errors
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [parsing, investmentId, document.id, load]);
+
+  // Escape to close
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  async function handleParse() {
+    setError("");
+    try {
+      await api.triggerParsing(investmentId, document.id);
+      setParsing(true);
+      load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  const job = data?.parse_job;
+  const statements = data?.statements || [];
+  const statementsForTab = statements.filter(
+    (s) => s.statement_type === activeTab
+  );
+  const availableTabs = STATEMENT_TABS.filter((tab) =>
+    statements.some((s) => s.statement_type === tab.key)
+  );
+  const hasStatements = statements.length > 0;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[60] flex flex-col">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
+        <div>
+          <h3 className="font-semibold text-gray-900">
+            Financial Statements
+          </h3>
+          <p className="text-xs text-gray-500">
+            {document.document_name} — {document.original_filename}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {hasStatements && (
+            <a
+              href={api.exportFinancialsUrl(investmentId, document.id)}
+              className="text-green-600 hover:text-green-800 text-sm font-medium"
+            >
+              Export Excel
+            </a>
+          )}
+          <button
+            onClick={handleParse}
+            disabled={parsing}
+            className={`text-sm font-medium px-3 py-1.5 rounded transition ${
+              parsing
+                ? "bg-gray-200 text-gray-400 cursor-not-allowed"
+                : "bg-purple-600 hover:bg-purple-700 text-white"
+            }`}
+          >
+            {parsing
+              ? "Parsing..."
+              : hasStatements
+                ? "Re-parse"
+                : "Parse"}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-auto bg-gray-100 p-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded px-4 py-2 text-red-700 text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        {/* Parsing progress */}
+        {parsing && job && (
+          <div className="bg-white rounded-lg shadow p-6 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                Parsing in progress...
+              </span>
+              <span className="text-sm text-gray-500">
+                {job.completed_chunks} / {job.total_chunks} chunks
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3">
+              <div
+                className="bg-purple-600 h-3 rounded-full transition-all duration-500"
+                style={{
+                  width: `${
+                    job.total_chunks > 0
+                      ? (job.completed_chunks / job.total_chunks) * 100
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Failed state */}
+        {job && job.status === "failed" && !parsing && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-4">
+            <p className="text-red-700 font-medium mb-1">Parsing failed</p>
+            <p className="text-red-600 text-sm">{job.error_message}</p>
+          </div>
+        )}
+
+        {/* Loading */}
+        {loading && (
+          <div className="text-center py-12 text-gray-400">Loading...</div>
+        )}
+
+        {/* Empty state */}
+        {!loading && !parsing && !hasStatements && (
+          <div className="text-center py-16">
+            <p className="text-gray-400 mb-4">
+              No financial statements have been extracted from this document yet.
+            </p>
+            <button
+              onClick={handleParse}
+              className="bg-purple-600 hover:bg-purple-700 text-white text-sm px-6 py-2.5 rounded transition"
+            >
+              Parse Financial Statements
+            </button>
+          </div>
+        )}
+
+        {/* Statements view */}
+        {!loading && hasStatements && (
+          <div>
+            {/* Tabs */}
+            <div className="flex gap-1 mb-4">
+              {(availableTabs.length > 0 ? availableTabs : STATEMENT_TABS).map(
+                (tab) => {
+                  const count = statements.filter(
+                    (s) => s.statement_type === tab.key
+                  ).length;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${
+                        activeTab === tab.key
+                          ? "bg-white text-purple-700 shadow"
+                          : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
+                      }`}
+                    >
+                      {tab.label}
+                      {count > 0 && (
+                        <span className="ml-1.5 text-xs text-gray-400">
+                          ({count})
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+              )}
+            </div>
+
+            {/* Statement content */}
+            {statementsForTab.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                No {STATEMENT_TABS.find((t) => t.key === activeTab)?.label || ""}{" "}
+                found in this document.
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {statementsForTab.map((stmt) => (
+                  <StatementTable key={stmt.id} statement={stmt} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
