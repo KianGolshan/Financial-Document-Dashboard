@@ -107,6 +107,61 @@ export const api = {
       { method: "DELETE" }
     ),
 
+  // Review & Edit
+  reviewStatement: (statementId, data) =>
+    request(`${API}/financials/statements/${statementId}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+
+  lockStatement: (statementId) =>
+    request(`${API}/financials/statements/${statementId}/lock`, {
+      method: "POST",
+    }),
+
+  editLineItem: (lineItemId, data) =>
+    request(`${API}/financials/line-items/${lineItemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+
+  getLineItemHistory: (lineItemId) =>
+    request(`${API}/financials/line-items/${lineItemId}/history`),
+
+  // Investment mapping
+  mapStatementToInvestment: (statementId, data) =>
+    request(`${API}/financials/statements/${statementId}/map-investment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+
+  suggestMapping: (statementId) =>
+    request(`${API}/financials/statements/${statementId}/suggest-mapping`),
+
+  getInvestmentFinancials: (investmentId) =>
+    request(`${API}/investments/${investmentId}/financials`),
+
+  // Dashboard
+  getDashboardFinancials: (investmentId) =>
+    request(`${API}/dashboard/financials/${investmentId}`),
+
+  getFinancialTrends: (investmentId) =>
+    request(`${API}/dashboard/financial-trends/${investmentId}`),
+
+  normalizeInvestmentLabels: (investmentId) =>
+    request(`${API}/dashboard/financials/${investmentId}/normalize`, {
+      method: "POST",
+    }),
+
+  getDashboardStatements: (investmentId, statementType = null) => {
+    let url = `${API}/dashboard/financials/${investmentId}/statements`;
+    if (statementType) url += `?statement_type=${statementType}`;
+    return request(url);
+  },
+
   // Search
   search: (query, filters = {}) => {
     const params = new URLSearchParams({ q: query });

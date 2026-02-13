@@ -14,7 +14,8 @@ from app.config import settings
 from app.database import SessionLocal
 from app.documents.models import Document
 from app.exceptions import bad_request, not_found
-from app.financial_parsing.models import FinancialStatement, LineItem, ParseJob
+from app.financial_parsing.models import EditLog, FinancialStatement, LineItem, ParseJob
+from app.investments.models import Investment
 
 logger = logging.getLogger(__name__)
 
@@ -383,18 +384,22 @@ def export_to_excel(db: Session, document_id: int) -> str:
         # Use the statement with the most line items as the template for row ordering
         template_stmt = max(stmts, key=lambda s: len(s.line_items))
 
-        # Build value lookup: {(stmt_id, label) -> value}
+        # Build value lookup using display values (edited if available)
+        # Key by (stmt_id, display_label) -> display_value
         value_map: dict[tuple[int, str], float | None] = {}
         for stmt in stmts:
             for li in stmt.line_items:
-                value_map[(stmt.id, li.label)] = li.value
+                display_lbl = li.edited_label if li.edited_label is not None else li.label
+                display_val = li.edited_value if li.edited_value is not None else li.value
+                value_map[(stmt.id, display_lbl)] = display_val
 
         for li in template_stmt.line_items:
             row_data = []
             indent = "  " * li.indent_level
-            row_data.append(f"{indent}{li.label}")
+            display_lbl = li.edited_label if li.edited_label is not None else li.label
+            row_data.append(f"{indent}{display_lbl}")
             for stmt in stmts:
-                val = value_map.get((stmt.id, li.label))
+                val = value_map.get((stmt.id, display_lbl))
                 row_data.append(val)
             ws.append(row_data)
 
@@ -439,3 +444,130 @@ def export_to_excel(db: Session, document_id: int) -> str:
     wb.save(tmp.name)
     tmp.close()
     return tmp.name
+
+
+# ── Review workflow ─────────────────────────────────────────────────────
+
+VALID_REVIEW_STATUSES = {"pending", "reviewed", "approved"}
+
+
+def review_statement(
+    db: Session, statement_id: int, review_status: str,
+    reviewer_id: str | None = None, review_notes: str | None = None,
+) -> FinancialStatement:
+    if review_status not in VALID_REVIEW_STATUSES:
+        raise bad_request(f"Invalid review_status. Must be one of: {VALID_REVIEW_STATUSES}")
+    stmt = get_statement(db, statement_id)
+    if stmt.locked:
+        raise bad_request("Statement is locked and cannot be modified")
+    stmt.review_status = review_status
+    stmt.reviewer_id = reviewer_id
+    stmt.review_notes = review_notes
+    db.commit()
+    db.refresh(stmt)
+    return stmt
+
+
+def lock_statement(db: Session, statement_id: int) -> FinancialStatement:
+    stmt = get_statement(db, statement_id)
+    stmt.locked = True
+    stmt.review_status = "approved"
+    db.commit()
+    db.refresh(stmt)
+    return stmt
+
+
+def edit_line_item(
+    db: Session, line_item_id: int,
+    edited_label: str | None = None, edited_value: float | None = None,
+) -> LineItem:
+    li = db.query(LineItem).filter(LineItem.id == line_item_id).first()
+    if not li:
+        raise not_found("Line item not found")
+
+    stmt = db.query(FinancialStatement).filter(
+        FinancialStatement.id == li.statement_id
+    ).first()
+    if stmt and stmt.locked:
+        raise bad_request("Statement is locked and cannot be modified")
+
+    # Log changes
+    if edited_label is not None and edited_label != li.edited_label:
+        db.add(EditLog(
+            line_item_id=li.id, field="label",
+            old_value=li.edited_label or li.label, new_value=edited_label,
+        ))
+        li.edited_label = edited_label
+
+    if edited_value is not None and edited_value != li.edited_value:
+        db.add(EditLog(
+            line_item_id=li.id, field="value",
+            old_value=str(li.edited_value if li.edited_value is not None else li.value),
+            new_value=str(edited_value),
+        ))
+        li.edited_value = edited_value
+
+    if edited_label is not None or edited_value is not None:
+        li.is_user_modified = True
+
+    db.commit()
+    db.refresh(li)
+    return li
+
+
+def get_edit_history(db: Session, line_item_id: int) -> list[EditLog]:
+    return db.query(EditLog).filter(
+        EditLog.line_item_id == line_item_id
+    ).order_by(EditLog.created_at.desc()).all()
+
+
+# ── Investment mapping ──────────────────────────────────────────────────
+
+def map_statement_to_investment(
+    db: Session, statement_id: int, investment_id: int,
+    reporting_date: str | None = None, fiscal_period_label: str | None = None,
+) -> FinancialStatement:
+    stmt = get_statement(db, statement_id)
+    inv = db.query(Investment).filter(Investment.id == investment_id).first()
+    if not inv:
+        raise not_found("Investment not found")
+    stmt.investment_id = investment_id
+    stmt.reporting_date = reporting_date
+    stmt.fiscal_period_label = fiscal_period_label
+    db.commit()
+    db.refresh(stmt)
+    return stmt
+
+
+def get_investment_financials(db: Session, investment_id: int) -> list[FinancialStatement]:
+    return db.query(FinancialStatement).filter(
+        FinancialStatement.investment_id == investment_id
+    ).order_by(
+        FinancialStatement.reporting_date.desc(),
+        FinancialStatement.statement_type,
+    ).all()
+
+
+def suggest_investment_mapping(db: Session, statement_id: int) -> dict:
+    """Auto-suggest investment mapping based on document metadata."""
+    stmt = get_statement(db, statement_id)
+    doc = db.query(Document).filter(Document.id == stmt.document_id).first()
+    if not doc:
+        return {"suggestions": []}
+
+    suggestions = []
+    # The document already belongs to an investment
+    inv = db.query(Investment).filter(Investment.id == doc.investment_id).first()
+    if inv:
+        suggestions.append({
+            "investment_id": inv.id,
+            "investment_name": inv.investment_name,
+            "confidence": "high",
+            "reason": "Document belongs to this investment",
+        })
+
+    return {
+        "suggestions": suggestions,
+        "period": stmt.period,
+        "period_end_date": stmt.period_end_date,
+    }

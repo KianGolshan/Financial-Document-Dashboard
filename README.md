@@ -3,6 +3,9 @@
 A document management and search application for finance documents. Built with a FastAPI backend and React frontend.
 Document extract functionality - parsing PDF uploads for financial tables and results, extracting for storage in the dashboard and export functionality into excel.
 
+## Owner
+Kian Golshan
+
 ## Prerequisites
 
 - Python 3.12+
