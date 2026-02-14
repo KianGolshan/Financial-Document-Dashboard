@@ -160,7 +160,7 @@ function StatementTable({ statement, onSaveItem, onReview, onLock, investmentId 
       </div>
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 text-left text-gray-500 uppercase text-xs">
               <th className="px-4 py-3">Line Item</th>
               <th className="px-4 py-3 text-right">Value</th>
@@ -208,6 +208,65 @@ function StatementTable({ statement, onSaveItem, onReview, onLock, investmentId 
   );
 }
 
+function ParseHistoryPanel({ history }) {
+  const [open, setOpen] = useState(false);
+  if (!history || history.length <= 1) return null;
+
+  const STATUS_COLORS = {
+    completed: "text-green-600",
+    failed: "text-red-600",
+    processing: "text-yellow-600",
+    pending: "text-gray-500",
+  };
+
+  return (
+    <div className="bg-white rounded-lg shadow mb-4">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 flex items-center justify-between hover:bg-gray-50 transition"
+      >
+        <span>Parse History ({history.length} runs)</span>
+        <span className="text-gray-400">{open ? "\u25B2" : "\u25BC"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-gray-100">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-left text-gray-500 uppercase text-xs">
+                <th className="px-4 py-2">Date</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Chunks</th>
+                <th className="px-4 py-2">Error</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {history.map((job, idx) => (
+                <tr key={job.id} className={idx === 0 ? "bg-purple-50" : "hover:bg-gray-50"}>
+                  <td className="px-4 py-2 text-gray-700 whitespace-nowrap">
+                    {new Date(job.created_at).toLocaleString()}
+                    {idx === 0 && (
+                      <span className="ml-2 text-xs text-purple-600 font-medium">Latest</span>
+                    )}
+                  </td>
+                  <td className={`px-4 py-2 font-medium ${STATUS_COLORS[job.status] || "text-gray-500"}`}>
+                    {job.status}
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {job.completed_chunks}/{job.total_chunks}
+                  </td>
+                  <td className="px-4 py-2 text-red-500 text-xs truncate max-w-[200px]">
+                    {job.error_message || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function FinancialStatements({
   investmentId,
   document,
@@ -218,11 +277,16 @@ export default function FinancialStatements({
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("income_statement");
+  const [parseHistory, setParseHistory] = useState([]);
 
   const load = useCallback(async () => {
     try {
-      const result = await api.getDocumentFinancials(investmentId, document.id);
+      const [result, history] = await Promise.all([
+        api.getDocumentFinancials(investmentId, document.id),
+        api.getParseHistory(investmentId, document.id).catch(() => []),
+      ]);
       setData(result);
+      setParseHistory(history);
       if (
         result.parse_job &&
         (result.parse_job.status === "processing" ||
@@ -411,7 +475,10 @@ export default function FinancialStatements({
 
         {/* Loading */}
         {loading && (
-          <div className="text-center py-12 text-gray-400">Loading...</div>
+          <div className="text-center py-12">
+            <div className="inline-block w-6 h-6 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin mb-2" />
+            <p className="text-gray-400 text-sm">Loading statements...</p>
+          </div>
         )}
 
         {/* Empty state */}
@@ -428,6 +495,9 @@ export default function FinancialStatements({
             </button>
           </div>
         )}
+
+        {/* Parse history */}
+        {!loading && <ParseHistoryPanel history={parseHistory} />}
 
         {/* Statements view */}
         {!loading && hasStatements && (

@@ -6,9 +6,10 @@ import InvestmentForm from "./components/InvestmentForm";
 import SecurityForm from "./components/SecurityForm";
 import SearchTab from "./components/SearchTab";
 import FinancialDataView from "./components/FinancialDataView";
+import DocumentsTab from "./components/DocumentsTab";
 
 export default function App() {
-  const [tab, setTab] = useState("dashboard");
+  const [tab, setTab] = useState("investments");
   const [investments, setInvestments] = useState([]);
   const [selectedInvestmentId, setSelectedInvestmentId] = useState(null);
   const [selectedSecurityId, setSelectedSecurityId] = useState(null);
@@ -107,39 +108,27 @@ export default function App() {
   return (
     <div className="h-screen flex flex-col">
       {/* Top nav */}
-      <header className="bg-slate-800 text-white px-6 py-3 flex items-center justify-between">
+      <header className="bg-slate-800 text-white px-6 py-3 flex items-center justify-between border-b-2 border-blue-600">
         <h1 className="text-lg font-semibold">Finance Document Manager</h1>
         <nav className="flex gap-1">
-          <button
-            onClick={() => setTab("dashboard")}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition ${
-              tab === "dashboard"
-                ? "bg-blue-600 text-white"
-                : "text-slate-300 hover:text-white hover:bg-slate-700"
-            }`}
-          >
-            Dashboard
-          </button>
-          <button
-            onClick={() => setTab("financials")}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition ${
-              tab === "financials"
-                ? "bg-blue-600 text-white"
-                : "text-slate-300 hover:text-white hover:bg-slate-700"
-            }`}
-          >
-            Financials
-          </button>
-          <button
-            onClick={() => setTab("search")}
-            className={`px-4 py-1.5 rounded text-sm font-medium transition ${
-              tab === "search"
-                ? "bg-blue-600 text-white"
-                : "text-slate-300 hover:text-white hover:bg-slate-700"
-            }`}
-          >
-            Search
-          </button>
+          {[
+            { key: "investments", label: "Investments" },
+            { key: "documents", label: "Documents" },
+            { key: "financials", label: "Financials" },
+            { key: "search", label: "Search" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-1.5 rounded text-sm font-medium transition ${
+                tab === t.key
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-300 hover:text-white hover:bg-slate-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </nav>
       </header>
 
@@ -154,7 +143,7 @@ export default function App() {
       )}
 
       {/* Main content */}
-      {tab === "dashboard" ? (
+      {tab === "investments" ? (
         <div className="flex flex-1 overflow-hidden">
           <Sidebar
             investments={investments}
@@ -184,6 +173,10 @@ export default function App() {
               </div>
             )}
           </main>
+        </div>
+      ) : tab === "documents" ? (
+        <div className="flex-1 overflow-auto">
+          <DocumentsTab investments={investments} />
         </div>
       ) : tab === "financials" ? (
         <div className="flex flex-1 overflow-hidden">

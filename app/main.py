@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.database import Base, engine
 from app.investments.router import router as investments_router
 from app.documents.router import router as documents_router
+from app.documents.router import all_documents_router
 from app.search.router import router as search_router
 from app.securities.router import router as securities_router
 from app.financial_parsing.router import router as financial_parsing_router
@@ -35,6 +36,7 @@ app.add_middleware(
 
 app.include_router(investments_router, prefix="/api/v1")
 app.include_router(documents_router, prefix="/api/v1")
+app.include_router(all_documents_router, prefix="/api/v1")
 app.include_router(search_router, prefix="/api/v1")
 app.include_router(securities_router, prefix="/api/v1")
 app.include_router(financial_parsing_router, prefix="/api/v1")

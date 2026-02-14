@@ -57,6 +57,9 @@ export const api = {
       method: "DELETE",
     }),
 
+  // All Documents (cross-investment)
+  listAllDocuments: () => request(`${API}/documents/all`),
+
   // Documents
   uploadDocuments: (investmentId, formData) =>
     request(`${API}/investments/${investmentId}/documents/bulk`, {
@@ -91,6 +94,11 @@ export const api = {
   getParseStatus: (investmentId, docId) =>
     request(
       `${API}/investments/${investmentId}/documents/${docId}/financials/status`
+    ),
+
+  getParseHistory: (investmentId, docId) =>
+    request(
+      `${API}/investments/${investmentId}/documents/${docId}/financials/history`
     ),
 
   getDocumentFinancials: (investmentId, docId) =>
@@ -155,6 +163,12 @@ export const api = {
     request(`${API}/dashboard/financials/${investmentId}/normalize`, {
       method: "POST",
     }),
+
+  exportStatementsUrl: (investmentId) =>
+    `${API}/dashboard/financials/${investmentId}/export/statements`,
+
+  exportComparisonUrl: (investmentId) =>
+    `${API}/dashboard/financials/${investmentId}/export/comparison`,
 
   getDashboardStatements: (investmentId, statementType = null) => {
     let url = `${API}/dashboard/financials/${investmentId}/statements`;

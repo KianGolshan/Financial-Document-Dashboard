@@ -21,12 +21,110 @@ function formatNumber(value) {
   }).format(value);
 }
 
+function formatCompact(value) {
+  if (value == null) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+  return value.toFixed(0);
+}
+
 function ReviewBadge({ status }) {
   const badge = REVIEW_BADGES[status] || REVIEW_BADGES.pending;
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${badge.cls}`}>
       {badge.label}
     </span>
+  );
+}
+
+function MiniBarChart({ values }) {
+  if (!values || values.length === 0) return null;
+  const nums = values.map((v) => v.value).filter((v) => v != null);
+  if (nums.length === 0) return null;
+  const max = Math.max(...nums.map(Math.abs));
+  if (max === 0) return null;
+
+  const barWidth = Math.max(4, Math.floor(60 / values.length));
+  const height = 32;
+
+  return (
+    <svg width={barWidth * values.length + 2} height={height} className="inline-block ml-2">
+      {values.map((v, i) => {
+        if (v.value == null) return null;
+        const h = Math.max(2, (Math.abs(v.value) / max) * (height - 4));
+        const color = v.value >= 0 ? "#8b5cf6" : "#ef4444";
+        return (
+          <rect
+            key={i}
+            x={i * barWidth + 1}
+            y={height - h - 2}
+            width={barWidth - 1}
+            height={h}
+            fill={color}
+            rx={1}
+          >
+            <title>{v.period}: {formatNumber(v.value)}</title>
+          </rect>
+        );
+      })}
+    </svg>
+  );
+}
+
+function TrendsPanel({ trends }) {
+  if (!trends || Object.keys(trends).length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        No trend data available. Map financial statements to this investment first.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+      {Object.entries(trends).map(([metric, dataPoints]) => {
+        const sorted = [...dataPoints].sort((a, b) =>
+          (a.reporting_date || a.period).localeCompare(b.reporting_date || b.period)
+        );
+        const latest = sorted[sorted.length - 1];
+        const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+        const change =
+          prev && prev.value && latest.value
+            ? ((latest.value - prev.value) / Math.abs(prev.value)) * 100
+            : null;
+
+        return (
+          <div
+            key={metric}
+            className="bg-white rounded-lg shadow p-4"
+          >
+            <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              {metric}
+            </p>
+            <div className="flex items-end justify-between">
+              <div>
+                <p className="text-xl font-bold text-gray-900">
+                  {formatCompact(latest.value)}
+                </p>
+                {change != null && (
+                  <p
+                    className={`text-xs font-medium ${
+                      change >= 0 ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {change >= 0 ? "+" : ""}
+                    {change.toFixed(1)}% vs prior
+                  </p>
+                )}
+              </div>
+              <MiniBarChart values={sorted} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -91,7 +189,7 @@ function EditableCell({ item, field, onSave, locked }) {
   );
 }
 
-function ComparisonTable({ data, showEdited, locked, onSaveItem }) {
+function ComparisonTable({ data }) {
   if (!data || !data.periods || data.periods.length === 0) {
     return (
       <div className="text-center py-8 text-gray-400">
@@ -103,9 +201,9 @@ function ComparisonTable({ data, showEdited, locked, onSaveItem }) {
   return (
     <div className="bg-white rounded-lg shadow overflow-x-auto">
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-gray-50 text-left text-gray-500 uppercase text-xs">
-            <th className="px-4 py-3 sticky left-0 bg-gray-50">Line Item</th>
+            <th className="px-4 py-3 sticky left-0 bg-gray-50 z-20">Line Item</th>
             {data.periods.map((p) => (
               <th key={p} className="px-4 py-3 text-right whitespace-nowrap">
                 {p}
@@ -146,7 +244,94 @@ function ComparisonTable({ data, showEdited, locked, onSaveItem }) {
   );
 }
 
-function StatementCard({ statement, showEdited, onSaveItem }) {
+function ContextPanel({ statements }) {
+  // Show source document info for the currently visible statements
+  const docIds = [...new Set(statements.map((s) => s.document_id))];
+  const periodCount = new Set(statements.map((s) => s.period)).size;
+  const reviewCounts = { pending: 0, reviewed: 0, approved: 0 };
+  const lockedCount = statements.filter((s) => s.locked).length;
+  statements.forEach((s) => {
+    const st = s.review_status || "pending";
+    if (reviewCounts[st] !== undefined) reviewCounts[st]++;
+  });
+
+  // Normalization completeness
+  let totalItems = 0;
+  let normalizedItems = 0;
+  statements.forEach((s) => {
+    (s.line_items || []).forEach((li) => {
+      totalItems++;
+      if (li.canonical_label) normalizedItems++;
+    });
+  });
+  const normPct = totalItems > 0 ? Math.round((normalizedItems / totalItems) * 100) : 0;
+
+  return (
+    <div className="bg-white rounded-lg shadow p-4 mb-4">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        Summary
+      </h3>
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
+        <div>
+          <p className="text-lg font-bold text-gray-900">{statements.length}</p>
+          <p className="text-xs text-gray-500">Statements</p>
+        </div>
+        <div>
+          <p className="text-lg font-bold text-gray-900">{periodCount}</p>
+          <p className="text-xs text-gray-500">Periods</p>
+        </div>
+        <div>
+          <p className="text-lg font-bold text-gray-900">{docIds.length}</p>
+          <p className="text-xs text-gray-500">Source Docs</p>
+        </div>
+        <div>
+          <p className="text-lg font-bold text-gray-900">{lockedCount}</p>
+          <p className="text-xs text-gray-500">Locked</p>
+        </div>
+        <div>
+          <p className={`text-lg font-bold ${normPct === 100 ? "text-green-600" : normPct > 50 ? "text-yellow-600" : "text-gray-900"}`}>
+            {normPct}%
+          </p>
+          <p className="text-xs text-gray-500">Normalized</p>
+        </div>
+      </div>
+      {/* Normalization progress bar */}
+      {totalItems > 0 && (
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+            <span>Label normalization</span>
+            <span>{normalizedItems}/{totalItems} items</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full transition-all ${normPct === 100 ? "bg-green-500" : "bg-purple-500"}`}
+              style={{ width: `${normPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+      <div className="mt-3 flex gap-2">
+        {reviewCounts.pending > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+            {reviewCounts.pending} pending
+          </span>
+        )}
+        {reviewCounts.reviewed > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+            {reviewCounts.reviewed} reviewed
+          </span>
+        )}
+        {reviewCounts.approved > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+            {reviewCounts.approved} approved
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatementCard({ statement, showEdited, onSaveItem, showNormalized }) {
   const locked = statement.locked;
 
   return (
@@ -161,6 +346,11 @@ function StatementCard({ statement, showEdited, onSaveItem }) {
               ending {statement.period_end_date}
             </span>
           )}
+          {statement.source_pages && (
+            <span className="ml-2 text-xs text-gray-400">
+              pp. {statement.source_pages}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <ReviewBadge status={statement.review_status} />
@@ -172,7 +362,7 @@ function StatementCard({ statement, showEdited, onSaveItem }) {
         </div>
       </div>
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-gray-50 text-left text-gray-500 uppercase text-xs">
             <th className="px-4 py-2">Line Item</th>
             <th className="px-4 py-2 text-right">Value</th>
@@ -188,12 +378,21 @@ function StatementCard({ statement, showEdited, onSaveItem }) {
                 className={`px-4 py-2 ${item.is_total ? "font-bold" : ""}`}
                 style={{ paddingLeft: `${1 + item.indent_level * 1.25}rem` }}
               >
-                <EditableCell
-                  item={item}
-                  field="label"
-                  onSave={onSaveItem}
-                  locked={locked}
-                />
+                {showNormalized && item.canonical_label ? (
+                  <span className="text-purple-700" title={`Raw: ${item.label}`}>
+                    {item.canonical_label}
+                  </span>
+                ) : (
+                  <EditableCell
+                    item={item}
+                    field="label"
+                    onSave={onSaveItem}
+                    locked={locked}
+                  />
+                )}
+                {showNormalized && !item.canonical_label && (
+                  <span className="ml-1 text-xs text-orange-400" title="Not normalized">?</span>
+                )}
               </td>
               <td className={`px-4 py-2 text-right font-mono ${item.is_total ? "font-bold" : ""}`}>
                 <EditableCell
@@ -214,21 +413,25 @@ function StatementCard({ statement, showEdited, onSaveItem }) {
 export default function FinancialDataView({ investmentId, investmentName }) {
   const [statements, setStatements] = useState([]);
   const [dashboardData, setDashboardData] = useState(null);
+  const [trendsData, setTrendsData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("income_statement");
-  const [viewMode, setViewMode] = useState("statements"); // statements | comparison
+  const [viewMode, setViewMode] = useState("statements"); // statements | comparison | trends
   const [showEdited, setShowEdited] = useState(true);
+  const [showNormalized, setShowNormalized] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [stmts, dashboard] = await Promise.all([
+      const [stmts, dashboard, trends] = await Promise.all([
         api.getInvestmentFinancials(investmentId),
         api.getDashboardFinancials(investmentId),
+        api.getFinancialTrends(investmentId),
       ]);
       setStatements(stmts);
       setDashboardData(dashboard);
+      setTrendsData(trends);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -300,6 +503,15 @@ export default function FinancialDataView({ investmentId, investmentName }) {
           >
             Normalize Labels
           </button>
+          <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showNormalized}
+              onChange={(e) => setShowNormalized(e.target.checked)}
+              className="rounded border-gray-300"
+            />
+            Canonical labels
+          </label>
           <select
             value={viewMode}
             onChange={(e) => setViewMode(e.target.value)}
@@ -307,7 +519,20 @@ export default function FinancialDataView({ investmentId, investmentName }) {
           >
             <option value="statements">Statement View</option>
             <option value="comparison">Period Comparison</option>
+            <option value="trends">Key Trends</option>
           </select>
+          {statements.length > 0 && (viewMode === "statements" || viewMode === "comparison") && (
+            <a
+              href={
+                viewMode === "comparison"
+                  ? api.exportComparisonUrl(investmentId)
+                  : api.exportStatementsUrl(investmentId)
+              }
+              className="text-sm text-green-600 hover:text-green-800 font-medium px-3 py-1 border border-green-300 rounded hover:bg-green-50 transition"
+            >
+              Export Excel
+            </a>
+          )}
         </div>
       </div>
 
@@ -318,33 +543,43 @@ export default function FinancialDataView({ investmentId, investmentName }) {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4">
-        {(availableTabs.length > 0 ? availableTabs : STATEMENT_TABS).map((tab) => {
-          const count = statements.filter(
-            (s) => s.statement_type === tab.key
-          ).length;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${
-                activeTab === tab.key
-                  ? "bg-white text-purple-700 shadow"
-                  : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
-              }`}
-            >
-              {tab.label}
-              {count > 0 && (
-                <span className="ml-1.5 text-xs text-gray-400">({count})</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Context panel */}
+      {!loading && statements.length > 0 && (
+        <ContextPanel statements={statements} />
+      )}
+
+      {/* Tabs (hide for trends view) */}
+      {viewMode !== "trends" && (
+        <div className="flex gap-1 mb-4">
+          {(availableTabs.length > 0 ? availableTabs : STATEMENT_TABS).map((tab) => {
+            const count = statements.filter(
+              (s) => s.statement_type === tab.key
+            ).length;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition ${
+                  activeTab === tab.key
+                    ? "bg-white text-purple-700 shadow"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
+                }`}
+              >
+                {tab.label}
+                {count > 0 && (
+                  <span className="ml-1.5 text-xs text-gray-400">({count})</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && (
-        <div className="text-center py-12 text-gray-400">Loading...</div>
+        <div className="text-center py-12">
+          <div className="inline-block w-6 h-6 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin mb-2" />
+          <p className="text-gray-400 text-sm">Loading financial data...</p>
+        </div>
       )}
 
       {!loading && statements.length === 0 && (
@@ -357,11 +592,12 @@ export default function FinancialDataView({ investmentId, investmentName }) {
         </div>
       )}
 
+      {!loading && viewMode === "trends" && (
+        <TrendsPanel trends={trendsData?.trends} />
+      )}
+
       {!loading && viewMode === "comparison" && (
-        <ComparisonTable
-          data={comparisonData}
-          showEdited={showEdited}
-        />
+        <ComparisonTable data={comparisonData} />
       )}
 
       {!loading && viewMode === "statements" && (
@@ -399,6 +635,7 @@ export default function FinancialDataView({ investmentId, investmentName }) {
                   statement={stmt}
                   showEdited={showEdited}
                   onSaveItem={handleSaveItem}
+                  showNormalized={showNormalized}
                 />
               </div>
             ))

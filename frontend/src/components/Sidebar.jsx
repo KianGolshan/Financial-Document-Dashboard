@@ -1,5 +1,21 @@
 import { useState } from "react";
 
+const ASSET_TYPE_COLORS = {
+  equity: "bg-blue-500",
+  debt: "bg-amber-500",
+  "real estate": "bg-emerald-500",
+  fund: "bg-purple-500",
+  crypto: "bg-orange-500",
+};
+
+function AssetBadge({ type }) {
+  if (!type) return null;
+  const color = ASSET_TYPE_COLORS[type.toLowerCase()] || "bg-slate-500";
+  return (
+    <span className={`inline-block w-2 h-2 rounded-full ${color} mr-1.5 shrink-0`} title={type} />
+  );
+}
+
 export default function Sidebar({
   investments,
   selectedInvestmentId,
@@ -13,6 +29,7 @@ export default function Sidebar({
   onDeleteSecurity,
 }) {
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const [search, setSearch] = useState("");
 
   function toggleExpand(id, e) {
     e.stopPropagation();
@@ -23,6 +40,16 @@ export default function Sidebar({
       return next;
     });
   }
+
+  const filtered = search
+    ? investments.filter((inv) => {
+        const q = search.toLowerCase();
+        return (
+          inv.investment_name.toLowerCase().includes(q) ||
+          (inv.asset_type && inv.asset_type.toLowerCase().includes(q))
+        );
+      })
+    : investments;
 
   return (
     <aside className="w-72 bg-slate-800 text-white flex flex-col">
@@ -37,13 +64,23 @@ export default function Sidebar({
           + Add
         </button>
       </div>
+      {/* Search filter */}
+      <div className="px-3 py-2 border-b border-slate-700">
+        <input
+          type="text"
+          placeholder="Filter investments..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full bg-slate-700 text-white text-xs px-3 py-1.5 rounded border border-slate-600 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+        />
+      </div>
       <ul className="flex-1 overflow-auto">
-        {investments.length === 0 && (
+        {filtered.length === 0 && (
           <li className="px-4 py-8 text-center text-slate-500 text-sm">
-            No investments yet
+            {search ? "No matches" : "No investments yet"}
           </li>
         )}
-        {investments.map((inv) => {
+        {filtered.map((inv) => {
           const isExpanded = expandedIds.has(inv.id);
           const hasSecs = inv.securities && inv.securities.length > 0;
           const isSelected =
@@ -68,17 +105,23 @@ export default function Sidebar({
                 </button>
 
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">
+                  <p className="font-medium text-sm truncate flex items-center">
+                    <AssetBadge type={inv.asset_type} />
                     {inv.investment_name}
                   </p>
                   {inv.asset_type && (
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-400 mt-0.5 pl-3.5">
                       {inv.asset_type}
+                      {inv.securities?.length > 0 && (
+                        <span className="ml-1 text-slate-500">
+                          · {inv.securities.length} sec
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>
 
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition ml-2 shrink-0">
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ml-2 shrink-0">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();

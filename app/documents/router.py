@@ -15,6 +15,13 @@ router = APIRouter(
     tags=["Documents"],
 )
 
+all_documents_router = APIRouter(tags=["Documents"])
+
+
+@all_documents_router.get("/documents/all")
+def list_all_documents(db: Session = Depends(get_db)):
+    return service.list_all_documents(db)
+
 
 @router.post("/", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
 async def upload_document(

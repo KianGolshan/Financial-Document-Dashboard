@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends
+import os
+
+from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -97,3 +100,35 @@ def list_investment_statements(
         FinancialStatement.reporting_date.desc(),
         FinancialStatement.statement_type,
     ).all()
+
+
+@router.get("/financials/{investment_id}/export/statements")
+def export_investment_statements(
+    investment_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Export all statements for an investment to Excel (statement view)."""
+    tmp_path = service.export_investment_statements_to_excel(db, investment_id)
+    background_tasks.add_task(os.unlink, tmp_path)
+    return FileResponse(
+        path=tmp_path,
+        filename="financial_statements.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@router.get("/financials/{investment_id}/export/comparison")
+def export_investment_comparison(
+    investment_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Export period comparison data for an investment to Excel."""
+    tmp_path = service.export_investment_comparison_to_excel(db, investment_id)
+    background_tasks.add_task(os.unlink, tmp_path)
+    return FileResponse(
+        path=tmp_path,
+        filename="financial_comparison.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
