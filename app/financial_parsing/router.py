@@ -53,6 +53,19 @@ def get_parse_status(
     return job
 
 
+@router.get("/history", response_model=list[ParseJobResponse])
+def get_parse_history(
+    investment_id: int,
+    document_id: int,
+    db: Session = Depends(get_db),
+):
+    from app.financial_parsing.models import ParseJob
+    jobs = db.query(ParseJob).filter(
+        ParseJob.document_id == document_id
+    ).order_by(ParseJob.created_at.desc()).all()
+    return jobs
+
+
 @router.get("/", response_model=DocumentStatementsResponse)
 def get_document_financials(
     investment_id: int,

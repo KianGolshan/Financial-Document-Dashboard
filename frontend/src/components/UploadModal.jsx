@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
 
 export default function UploadModal({ investmentId, securityId, onClose, onDone }) {
@@ -34,9 +35,24 @@ export default function UploadModal({ investmentId, securityId, onClose, onDone 
     }
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+  function handleChooseFiles() {
+    inputRef.current?.click();
+  }
+
+  function handleFileChange(e) {
+    setFiles([...e.target.files]);
+  }
+
+  return createPortal(
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.4)" }}
+      onClick={onClose}
+    >
+      <div
+        style={{ position: "relative", zIndex: 10000 }}
+        className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
           <h3 className="text-lg font-semibold">Upload Documents</h3>
           <button
@@ -55,31 +71,28 @@ export default function UploadModal({ investmentId, securityId, onClose, onDone 
 
           {/* File picker */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <span className="block text-sm font-medium text-gray-700 mb-1">
               Files (.pdf, .doc, .docx, .xlsx, .xls)
-            </label>
-            <div
-              onClick={() => inputRef.current.click()}
-              className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 transition"
+            </span>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xlsx,.xls"
+              onChange={handleFileChange}
+              style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0 }}
+            />
+            <button
+              type="button"
+              onClick={handleChooseFiles}
+              className="w-full border-2 border-dashed border-gray-300 rounded-lg px-4 py-6 text-center hover:border-blue-400 hover:bg-blue-50 transition cursor-pointer"
             >
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.xlsx,.xls"
-                className="hidden"
-                onChange={(e) => setFiles([...e.target.files])}
-              />
-              {files.length === 0 ? (
-                <p className="text-sm text-gray-500">
-                  Click to select files
-                </p>
-              ) : (
-                <p className="text-sm text-blue-700">
-                  {files.length} file{files.length > 1 ? "s" : ""} selected
-                </p>
-              )}
-            </div>
+              <span className="text-sm text-gray-600">
+                {files.length === 0
+                  ? "Click to choose files"
+                  : `${files.length} file(s) selected`}
+              </span>
+            </button>
             {files.length > 0 && (
               <ul className="mt-2 text-xs text-gray-500 space-y-0.5">
                 {[...files].map((f, i) => (
@@ -136,6 +149,7 @@ export default function UploadModal({ investmentId, securityId, onClose, onDone 
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

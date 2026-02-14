@@ -171,6 +171,45 @@ def list_documents(
     return docs, len(docs)
 
 
+def list_all_documents(db: Session) -> list[dict]:
+    """List all documents across all investments with investment name and parse status."""
+    from app.investments.models import Investment
+    from app.financial_parsing.models import ParseJob
+
+    docs = (
+        db.query(Document, Investment.investment_name)
+        .join(Investment, Document.investment_id == Investment.id)
+        .order_by(Document.created_at.desc())
+        .all()
+    )
+
+    # Get latest parse job status for each document
+    parse_jobs = db.query(ParseJob).all()
+    job_by_doc = {}
+    for job in parse_jobs:
+        existing = job_by_doc.get(job.document_id)
+        if existing is None or job.created_at > existing.created_at:
+            job_by_doc[job.document_id] = job
+
+    result = []
+    for doc, inv_name in docs:
+        job = job_by_doc.get(doc.id)
+        result.append({
+            "id": doc.id,
+            "investment_id": doc.investment_id,
+            "investment_name": inv_name,
+            "security_id": doc.security_id,
+            "document_name": doc.document_name,
+            "document_date": doc.document_date,
+            "document_type": doc.document_type,
+            "file_size": doc.file_size,
+            "original_filename": doc.original_filename,
+            "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            "parse_status": job.status if job else None,
+        })
+    return result
+
+
 def get_document(db: Session, investment_id: int, document_id: int) -> Document:
     doc = (
         db.query(Document)

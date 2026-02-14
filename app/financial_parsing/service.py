@@ -446,6 +446,151 @@ def export_to_excel(db: Session, document_id: int) -> str:
     return tmp.name
 
 
+def export_investment_statements_to_excel(db: Session, investment_id: int) -> str:
+    """Export all statements for an investment (statement view) to Excel."""
+    statements = get_investment_financials(db, investment_id)
+    if not statements:
+        raise not_found("No financial statements found for this investment")
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    type_labels = {
+        "income_statement": "Income Statement",
+        "balance_sheet": "Balance Sheet",
+        "cash_flow": "Cash Flow",
+    }
+
+    by_type: dict[str, list[FinancialStatement]] = {}
+    for stmt in statements:
+        by_type.setdefault(stmt.statement_type, []).append(stmt)
+
+    for stmt_type, stmts in by_type.items():
+        sheet_name = type_labels.get(stmt_type, stmt_type)[:31]
+        ws = wb.create_sheet(title=sheet_name)
+
+        headers = ["Line Item"]
+        for stmt in stmts:
+            label = stmt.fiscal_period_label or stmt.period
+            headers.append(label)
+        ws.append(headers)
+
+        for col_idx, _ in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = Font(bold=True, size=11)
+            cell.alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="left")
+
+        template_stmt = max(stmts, key=lambda s: len(s.line_items))
+
+        value_map: dict[tuple[int, str], float | None] = {}
+        for stmt in stmts:
+            for li in stmt.line_items:
+                display_lbl = li.edited_label if li.edited_label is not None else li.label
+                display_val = li.edited_value if li.edited_value is not None else li.value
+                value_map[(stmt.id, display_lbl)] = display_val
+
+        for li in template_stmt.line_items:
+            indent = "  " * li.indent_level
+            display_lbl = li.edited_label if li.edited_label is not None else li.label
+            row_data = [f"{indent}{display_lbl}"]
+            for stmt in stmts:
+                row_data.append(value_map.get((stmt.id, display_lbl)))
+            ws.append(row_data)
+
+            row_num = ws.max_row
+            if li.is_total:
+                for col_idx in range(1, len(headers) + 1):
+                    ws.cell(row=row_num, column=col_idx).font = Font(bold=True)
+            for col_idx in range(2, len(headers) + 1):
+                ws.cell(row=row_num, column=col_idx).number_format = '#,##0.00'
+
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    val = str(cell.value) if cell.value else ""
+                    max_len = max(max_len, len(val))
+                except Exception:
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_len + 4, 50)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    wb.save(tmp.name)
+    tmp.close()
+    return tmp.name
+
+
+def export_investment_comparison_to_excel(db: Session, investment_id: int) -> str:
+    """Export period comparison data for an investment to Excel."""
+    from app.financial_parsing.consolidation.aggregation import build_comparison_dataset
+
+    dataset = build_comparison_dataset(db, investment_id)
+    stmt_types = dataset.get("statement_types", {})
+    if not stmt_types:
+        raise not_found("No comparison data found for this investment")
+
+    wb = Workbook()
+    wb.remove(wb.active)
+
+    type_labels = {
+        "income_statement": "Income Statement",
+        "balance_sheet": "Balance Sheet",
+        "cash_flow": "Cash Flow",
+    }
+
+    for stmt_type, data in stmt_types.items():
+        periods = data.get("periods", [])
+        rows = data.get("rows", [])
+        if not periods or not rows:
+            continue
+
+        sheet_name = type_labels.get(stmt_type, stmt_type)[:31]
+        ws = wb.create_sheet(title=sheet_name)
+
+        headers = ["Line Item"] + periods
+        ws.append(headers)
+
+        for col_idx, _ in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = Font(bold=True, size=11)
+            cell.alignment = Alignment(horizontal="center")
+        ws.cell(row=1, column=1).alignment = Alignment(horizontal="left")
+
+        for row in rows:
+            indent = "  " * row.get("indent_level", 0)
+            label = row.get("canonical_label", "")
+            values = row.get("values", {})
+            row_data = [f"{indent}{label}"]
+            for p in periods:
+                row_data.append(values.get(p))
+            ws.append(row_data)
+
+            row_num = ws.max_row
+            if row.get("is_total"):
+                for col_idx in range(1, len(headers) + 1):
+                    ws.cell(row=row_num, column=col_idx).font = Font(bold=True)
+            for col_idx in range(2, len(headers) + 1):
+                ws.cell(row=row_num, column=col_idx).number_format = '#,##0.00'
+
+        for col in ws.columns:
+            max_len = 0
+            col_letter = col[0].column_letter
+            for cell in col:
+                try:
+                    val = str(cell.value) if cell.value else ""
+                    max_len = max(max_len, len(val))
+                except Exception:
+                    pass
+            ws.column_dimensions[col_letter].width = min(max_len + 4, 50)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    wb.save(tmp.name)
+    tmp.close()
+    return tmp.name
+
+
 # ── Review workflow ─────────────────────────────────────────────────────
 
 VALID_REVIEW_STATUSES = {"pending", "reviewed", "approved"}

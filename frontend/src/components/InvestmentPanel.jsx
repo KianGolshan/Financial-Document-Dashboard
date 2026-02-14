@@ -30,7 +30,7 @@ function DocumentTable({ documents, investmentId, onDelete, onView, onFinancials
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
       <table className="w-full text-sm">
-        <thead>
+        <thead className="sticky top-0 z-10">
           <tr className="bg-gray-50 text-left text-gray-500 uppercase text-xs">
             <th className="px-4 py-3">Name</th>
             <th className="px-4 py-3">File</th>
@@ -242,9 +242,12 @@ export default function InvestmentPanel({
   }
 
   // ── Investment view ────────────────────────────────────────────────
+  const secCount = investment.securities?.length || 0;
+  const docCount = documents.length;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-gray-900">
             {investment.investment_name}
@@ -265,6 +268,18 @@ export default function InvestmentPanel({
         >
           Upload Documents
         </button>
+      </div>
+
+      {/* Summary stats */}
+      <div className="flex gap-4 mb-6">
+        <div className="bg-white rounded-lg shadow px-4 py-3 flex-1 text-center">
+          <p className="text-2xl font-bold text-gray-900">{secCount}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Securities</p>
+        </div>
+        <div className="bg-white rounded-lg shadow px-4 py-3 flex-1 text-center">
+          <p className="text-2xl font-bold text-gray-900">{docCount}</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Documents</p>
+        </div>
       </div>
 
       {error && (
